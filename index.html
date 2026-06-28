@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CreditCardManager</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar">
+        <div>
+          <p class="eyebrow">Monthly Spend</p>
+          <h1>Budget Console</h1>
+        </div>
+
+        <label class="field">
+          <span>Month</span>
+          <input id="monthPicker" type="month" />
+        </label>
+
+        <nav class="tabs" aria-label="Views">
+          <button class="tab is-active" data-view="dashboard" type="button">Dashboard</button>
+          <button class="tab" data-view="transactions" type="button">Transactions</button>
+          <button class="tab" data-view="budgets" type="button">Budgets</button>
+          <button class="tab" data-view="import" type="button">Import CSV</button>
+        </nav>
+
+        <div class="quick-stats">
+          <div>
+            <span>Total spent</span>
+            <strong id="sideSpent">$0</strong>
+          </div>
+          <div>
+            <span>Budget left</span>
+            <strong id="sideLeft">$0</strong>
+          </div>
+        </div>
+      </aside>
+
+      <section class="content">
+        <section class="view is-active" id="dashboardView">
+          <div class="toolbar">
+            <div>
+              <p class="eyebrow">Overview</p>
+              <h2 id="dashboardTitle">This month</h2>
+            </div>
+            <button class="primary" data-open-view="transactions" type="button">Add transaction</button>
+          </div>
+
+          <div class="summary-grid">
+            <article class="metric"><span>Spent</span><strong id="totalSpent">$0</strong></article>
+            <article class="metric"><span>Budgeted</span><strong id="totalBudget">$0</strong></article>
+            <article class="metric"><span>Remaining</span><strong id="remainingBudget">$0</strong></article>
+            <article class="metric"><span>Transactions</span><strong id="transactionCount">0</strong></article>
+          </div>
+
+          <div class="dashboard-grid">
+            <section class="panel">
+              <div class="panel-head">
+                <h3>Category budgets</h3>
+                <button class="text-button" data-open-view="budgets" type="button">Edit</button>
+              </div>
+              <div id="budgetList" class="budget-list"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-head"><h3>Spend mix</h3></div>
+              <div class="chart-wrap">
+                <canvas id="spendChart" width="440" height="300" aria-label="Spend by category chart"></canvas>
+              </div>
+            </section>
+          </div>
+
+          <section class="panel">
+            <div class="panel-head">
+              <h3>Recent transactions</h3>
+              <button class="text-button" data-open-view="transactions" type="button">View all</button>
+            </div>
+            <div id="recentTransactions" class="transaction-list"></div>
+          </section>
+        </section>
+
+        <section class="view" id="transactionsView">
+          <div class="toolbar">
+            <div>
+              <p class="eyebrow">Ledger</p>
+              <h2>Transactions</h2>
+            </div>
+            <button id="clearMonthBtn" class="danger" type="button">Clear month</button>
+          </div>
+
+          <form id="transactionForm" class="form-grid">
+            <label class="field"><span>Date</span><input name="date" type="date" required /></label>
+            <label class="field"><span>Description</span><input name="description" type="text" placeholder="Coffee, rent, groceries" required /></label>
+            <label class="field"><span>Category</span><input name="category" list="categoryOptions" type="text" placeholder="Dining" required /></label>
+            <label class="field"><span>Amount</span><input name="amount" type="number" min="0" step="0.01" placeholder="0.00" required /></label>
+            <label class="field"><span>Source</span><input name="source" type="text" placeholder="Manual, Visa, Amex" /></label>
+            <button class="primary submit-button" type="submit">Add</button>
+          </form>
+
+          <datalist id="categoryOptions"></datalist>
+          <div id="transactionTable" class="table-shell"></div>
+        </section>
+
+        <section class="view" id="budgetsView">
+          <div class="toolbar">
+            <div>
+              <p class="eyebrow">Planning</p>
+              <h2>Category budgets</h2>
+            </div>
+          </div>
+
+          <form id="budgetForm" class="form-grid compact-form">
+            <label class="field"><span>Category</span><input name="category" list="categoryOptions" type="text" placeholder="Groceries" required /></label>
+            <label class="field"><span>Monthly budget</span><input name="amount" type="number" min="0" step="0.01" placeholder="500.00" required /></label>
+            <button class="primary submit-button" type="submit">Save</button>
+          </form>
+
+          <div id="budgetEditor" class="budget-editor"></div>
+        </section>
+
+        <section class="view" id="importView">
+          <div class="toolbar">
+            <div>
+              <p class="eyebrow">Credit cards</p>
+              <h2>CSV import</h2>
+            </div>
+            <button id="exportCsvBtn" class="primary" type="button">Export backup</button>
+          </div>
+
+          <section class="import-box">
+            <input id="csvInput" type="file" accept=".csv,text/csv" />
+            <label for="csvInput" class="drop-zone">
+              <strong>Choose a CSV file</strong>
+              <span>Common columns like Date, Description, Amount, Debit, Credit, Category, and Card are detected.</span>
+            </label>
+          </section>
+
+          <div class="storage-note">
+            <strong>Storage:</strong>
+            New entries are saved in this browser immediately. Use Export backup to keep a CSV copy, then import that CSV later to restore or move the ledger.
+          </div>
+
+          <div id="importStatus" class="status-line"></div>
+          <div id="importPreview" class="table-shell"></div>
+        </section>
+      </section>
+    </main>
+
+    <template id="emptyTemplate">
+      <div class="empty-state"><p>No entries yet.</p></div>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
