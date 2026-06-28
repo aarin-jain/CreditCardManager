@@ -2,6 +2,13 @@ const STORAGE_KEY = "monthlySpendTracker:v1";
 const SEED_CSV_PATH = "./data/spending.csv";
 const DEFAULT_CATEGORIES = ["Groceries", "Dining", "Transport", "Utilities", "Shopping", "Health", "Travel", "Entertainment", "Rent", "Other"];
 const CATEGORY_COLORS = ["#136f63", "#d9843b", "#386fa4", "#8f5b9a", "#b4413d", "#5f7f3d", "#2f7f8f", "#9a6b2f", "#6d7480", "#243b36"];
+const DATE_KEYS = ["date", "transaction date", "posted date", "post date", "posting date", "purchase date", "authorized date", "trans date"];
+const DESCRIPTION_KEYS = ["description", "name", "merchant", "payee", "memo", "details", "transaction", "transaction description", "original description"];
+const CATEGORY_KEYS = ["category", "type", "group", "expense category"];
+const SOURCE_KEYS = ["card", "account", "source", "account name", "institution", "card name"];
+const AMOUNT_KEYS = ["amount", "transaction amount", "net amount", "expense amount", "spend", "total"];
+const DEBIT_KEYS = ["debit", "withdrawal", "charge", "charges", "expense", "expenses", "paid out", "outflow"];
+const CREDIT_KEYS = ["credit", "deposit", "payment", "income", "refund", "paid in", "inflow"];
 
 const state = loadState();
 const els = {};
@@ -122,11 +129,12 @@ async function handleCsvFile(event) {
   if (!file) return;
 
   const text = await file.text();
-  const imported = parseCsv(text).map(mapCsvRow).filter(Boolean);
+  const rows = parseCsv(text);
+  const imported = rows.map(mapCsvRow).filter(Boolean);
   renderImportPreview(imported);
   els.importStatus.textContent = imported.length
     ? `${imported.length} transactions ready from ${file.name}.`
-    : `No usable transactions found in ${file.name}.`;
+    : `No usable transactions found in ${file.name}. Try exporting columns for date, merchant/description, and amount.`;
   event.target.value = "";
 }
 
@@ -390,7 +398,7 @@ function drawChart(byCategory) {
 }
 
 function parseCsv(text) {
-  const rows = [];
+  const rawRows = [];
   let current = [];
   let field = "";
   let quoted = false;
@@ -408,7 +416,7 @@ function parseCsv(text) {
     } else if ((char === "\n" || char === "\r") && !quoted) {
       if (char === "\r" && next === "\n") i += 1;
       current.push(field);
-      if (current.some((value) => value.trim())) rows.push(current);
+      if (current.some((value) => value.trim())) rawRows.push(current);
       current = [];
       field = "";
     } else {
@@ -416,15 +424,29 @@ function parseCsv(text) {
     }
   }
   current.push(field);
-  if (current.some((value) => value.trim())) rows.push(current);
-  if (!rows.length) return [];
-  const headers = rows[0].map((header) => normalizeHeader(header));
-  return rows.slice(1).map((row) => {
+  if (current.some((value) => value.trim())) rawRows.push(current);
+  if (!rawRows.length) return [];
+
+  const headerIndex = findHeaderRow(rawRows);
+  if (headerIndex === -1) return [];
+
+  const headers = rawRows[headerIndex].map((header) => normalizeHeader(header));
+  return rawRows.slice(headerIndex + 1).map((row) => {
     const item = {};
     headers.forEach((header, index) => {
       item[header] = row[index] || "";
     });
     return item;
+  });
+}
+
+function findHeaderRow(rows) {
+  return rows.findIndex((row) => {
+    const headers = row.map((header) => normalizeHeader(header));
+    const hasDate = headers.some((header) => DATE_KEYS.includes(header));
+    const hasDescription = headers.some((header) => DESCRIPTION_KEYS.includes(header));
+    const hasAmount = headers.some((header) => AMOUNT_KEYS.includes(header) || DEBIT_KEYS.includes(header) || CREDIT_KEYS.includes(header));
+    return hasDate && hasAmount && (hasDescription || headers.length >= 3);
   });
 }
 
@@ -446,20 +468,32 @@ function csvCell(value) {
 }
 
 function mapCsvRow(row) {
-  const dateRaw = firstValue(row, ["date", "transaction date", "posted date", "post date"]);
+  const dateRaw = firstValue(row, DATE_KEYS);
   const date = parseDate(dateRaw);
-  const description = firstValue(row, ["description", "name", "merchant", "payee", "memo"]);
-  const amountRaw = firstValue(row, ["amount", "debit", "withdrawal", "charge"]) || firstValue(row, ["credit", "deposit", "payment"]);
-  const amount = Math.abs(parseMoney(amountRaw));
+  const description = firstValue(row, DESCRIPTION_KEYS);
+  const amount = getTransactionAmount(row);
   if (!date || !description || !amount) return null;
   return {
     id: crypto.randomUUID(),
     date,
     description: description.trim(),
-    category: normalizeCategory(firstValue(row, ["category", "type"]) || inferCategory(description)),
+    category: normalizeCategory(firstValue(row, CATEGORY_KEYS) || inferCategory(description)),
     amount,
-    source: firstValue(row, ["card", "account", "source", "account name"]) || "CSV"
+    source: firstValue(row, SOURCE_KEYS) || "CSV"
   };
+}
+
+function getTransactionAmount(row) {
+  const directAmount = firstValue(row, AMOUNT_KEYS);
+  if (directAmount) return Math.abs(parseMoney(directAmount));
+
+  const debit = firstValue(row, DEBIT_KEYS);
+  if (debit) return Math.abs(parseMoney(debit));
+
+  const credit = firstValue(row, CREDIT_KEYS);
+  if (credit) return Math.abs(parseMoney(credit));
+
+  return 0;
 }
 
 function inferCategory(description) {
@@ -543,7 +577,7 @@ function firstValue(row, keys) {
 }
 
 function normalizeHeader(value) {
-  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+  return String(value || "").replace(/^\uFEFF/, "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
 }
 
 function normalizeForKey(value) {
@@ -556,9 +590,12 @@ function normalizeCategory(value) {
 }
 
 function parseMoney(value) {
-  const cleaned = String(value || "").replace(/[,$()]/g, "").trim();
-  const parsed = Number(cleaned);
-  return Number.isFinite(parsed) ? parsed : 0;
+  const text = String(value || "").trim();
+  const negative = /^\(.*\)$/.test(text) || text.includes("-");
+  const cleaned = text.replace(/[,$()+\s]/g, "").replace(/−/g, "-");
+  const parsed = Number(cleaned.replace(/-/g, ""));
+  if (!Number.isFinite(parsed)) return 0;
+  return negative ? -parsed : parsed;
 }
 
 function parseDate(value) {
